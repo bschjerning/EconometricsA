@@ -1,8 +1,8 @@
 ## Course Schedule
 | Week | Date       | Lectures Topic                             | Readings                                          | Practical Classes           | TA Class 1 | TA Class 2 |
 |------|------------|--------------------------------------------|--------------------------------------------------|-----------------------------|------------|------------|
-| 36   | 02/09 (Mon)| [01 Introduction](1_lectures/01_intro)     | W1.1-W1.4                                         | -                           | -          | -          |
-| 36   | 03/09 (Tue)| [02 Linear Regression](1_lectures/02_slr)  | W2.1-W2.6, W2.A, WC.4                             | -                           | -          | -          |
+| 36   | 02/09 (Mon)| [01 Introduction](1_lectures/01_intro)     | W1.1-W1.4                                         | No class                   | -          | -          |
+| 36   | 03/09 (Tue)| [02 Linear Regression](1_lectures/02_slr)  | W2.1-W2.6, W2.A, WC.4                             | No class                   | -          | -          |
 | 36   | 06/09 (Fri)| Cont.                                      |                                                   | [Problem set 1](2_class/PS1)| Thor       | Daniel     |
 | 37   | 09/09 (Mon)| [03 Multiple Linear Regression](1_lectures/03_mlr)| W3.1-W3.6, W3.A6, <br>WE.1-WE.2, WD.1-WD.5        | [Problem set 2](#)          | Thor       | Pedro      |
 | 37   | 10/09 (Tue)| Cont.                                      |                                                  | -                           | Thor       | Pedro      |

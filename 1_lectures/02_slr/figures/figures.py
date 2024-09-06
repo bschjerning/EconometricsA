@@ -84,7 +84,7 @@ for i in range(2):
     # Plot
     plt.subplot(1, 2, i+1)
     plt.scatter(x, y, alpha=0.5)
-    plt.plot(x, y_pred, color='red', linewidth=2)
+    plt.plot(x, y_pred, color='red', linewidth=4)
     plt.title(f"Eksempel {i+1}", fontsize=30)
     plt.xlabel("x", fontsize=30)
     plt.ylabel("y", fontsize=30)
@@ -127,7 +127,7 @@ def plot_linear_regression(beta0=2, beta1=3, n=1000, sigma_u=[5, 3], sigma_x=[1,
         # Plot
         plt.subplot(1, 2, i + 1)
         plt.scatter(x, y, alpha=0.5)
-        plt.plot(x, y_pred, color='red', linewidth=2)
+        plt.plot(x, y_pred, color='red', linewidth=4)
         
         # Create subtitle with parameter values
         subtitle = fr"$\sigma_x={sigma_x[i]}$, $\sigma_u={sigma_u[i]}$, " \
@@ -153,4 +153,142 @@ plt.savefig("R2_example.pdf")
 plt.show()
 
 
-# %% 
+# %% #%% Figure 2.3: Conditional Variance of u given x, Var(u|x)
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Parameters
+n = 1000  # Number of observations
+
+min_x, max_x = -3, 3  # Range for uniform distribution of x
+std_u = 1  # Standard deviation of u for Dataset 1 (Homoscedasticity)
+
+# Generate random variables x for both datasets
+np.random.seed(42)  # For reproducibility
+x = np.random.uniform(min_x, max_x, n)
+
+# Dataset 1 (Homoscedasticity): u has constant variance
+u_homo = np.random.normal(0, std_u, n)  # Constant variance
+
+# Dataset 2 (Heteroscedasticity): Variance of u depends on x
+u_hetero = (0.5 + 0.5 * np.abs(x)) * np.random.normal(0, std_u, n)  # Variance increases with |x|
+
+# Plotting
+plt.figure(figsize=(16, 8))
+
+# Plot for Homoscedasticity
+plt.subplot(1, 2, 1)
+plt.scatter(x, u_homo, alpha=0.5)
+plt.axhline(0, color='red', linestyle='--')
+# plt.title(r"", fontsize=30)
+plt.xlabel("x", fontsize=30)
+plt.ylabel("u", fontsize=30)
+plt.xticks(fontsize=30)
+plt.yticks(fontsize=30)
+
+# Plot for Heteroscedasticity
+plt.subplot(1, 2, 2)
+plt.scatter(x, u_hetero, alpha=0.5)
+plt.axhline(0, color='red', linestyle='--')
+# plt.title(r"", fontsize=30)
+plt.xlabel("x", fontsize=30)
+plt.ylabel("u", fontsize=30)
+plt.xticks(fontsize=30)
+plt.yticks(fontsize=30)
+
+plt.tight_layout()
+
+# Save the figure as a PDF
+plt.savefig("Var[u|x]_plots.pdf")
+
+plt.show()
+
+#%% Figure 2.4: Regression plots with and without constant
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+
+# Set seed for reproducibility
+np.random.seed(42)
+
+# Parameters for DGP
+beta0_true = 10  # True intercept
+beta1_true = 2  # True slope
+n = 500  # Sample size
+sigma_u = 5  # Standard deviation of noise
+
+# Generate random x values and corresponding y with a constant term
+x = np.random.uniform(0, 10, n)
+u = 0.5 * np.random.normal(0, sigma_u, n)
+y = beta0_true + beta1_true * x + u
+
+# Fit the linear models: with constant and without constant
+model_with_intercept = LinearRegression(fit_intercept=True).fit(x.reshape(-1, 1), y)
+y_pred_with_intercept = model_with_intercept.predict(x.reshape(-1, 1))
+R2_with_intercept = model_with_intercept.score(x.reshape(-1, 1), y)
+
+model_without_intercept = LinearRegression(fit_intercept=False).fit(x.reshape(-1, 1), y)
+y_pred_without_intercept = model_without_intercept.predict(x.reshape(-1, 1))
+R2_without_intercept = model_without_intercept.score(x.reshape(-1, 1), y)
+
+# Calculate the estimated parameters
+beta0_hat_with_intercept = model_with_intercept.intercept_
+beta1_hat_with_intercept = model_with_intercept.coef_[0]
+beta1_hat_without_intercept = model_without_intercept.coef_[0]
+
+# Residual calculations
+residuals_with_intercept = y - y_pred_with_intercept
+residuals_without_intercept = y - y_pred_without_intercept
+
+# Plotting with residuals
+fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+
+# Panel 1: Regression with intercept
+axes[0, 0].scatter(x, y, alpha=0.5, label="Data (y)", color='blue', s=30)
+axes[0, 0].plot(x, beta0_true + beta1_true * x, color='green', linestyle='-', linewidth=4, label="True regression line")
+axes[0, 0].plot(x, y_pred_with_intercept, color='red', linewidth=4, label="Fitted regression (with intercept)")
+axes[0, 0].set_title(f"With Intercept\n$R^2 = {R2_with_intercept:.2f}$, $\hat{{\\beta}}_0 = {beta0_hat_with_intercept:.2f}$, $\hat{{\\beta}}_1 = {beta1_hat_with_intercept:.2f}$", fontsize=18)
+axes[0, 0].set_xlabel(r"$x$", fontsize=18)
+axes[0, 0].set_ylabel(r"$y$", fontsize=18)
+axes[0, 0].legend(loc="best", fontsize=15)
+axes[0, 0].grid(True)
+
+# Panel 2: Regression without intercept
+axes[0, 1].scatter(x, y, alpha=0.5, label="Data (y)", color='blue', s=30)
+axes[0, 1].plot(x, beta0_true + beta1_true * x, color='green', linestyle='-', linewidth=4, label="True regression line")
+axes[0, 1].plot(x, y_pred_without_intercept, color='red', linewidth=4, label="Fitted regression (without intercept)")
+axes[0, 1].set_title(f"Without Intercept\n$R^2 = {R2_without_intercept:.2f}$, $\hat{{\\beta}}_1 = {beta1_hat_without_intercept:.2f}$", fontsize=18)
+axes[0, 1].set_xlabel(r"$x$", fontsize=18)
+axes[0, 1].set_ylabel(r"$y$", fontsize=18)
+axes[0, 1].legend(loc="best", fontsize=15)
+axes[0, 1].grid(True)
+
+# Show negative R-squared if applicable
+if R2_without_intercept < 0:
+    axes[0, 1].text(0.5, 0.9, r"$R^2$ is negative", transform=axes[0, 1].transAxes, fontsize=18, color='red', ha='center')
+
+# Residuals Panel 1: Residuals with intercept
+axes[1, 0].scatter(x, residuals_with_intercept, alpha=0.5, color='purple', s=30)
+axes[1, 0].axhline(0, color='black', linestyle='-', linewidth=2)
+axes[1, 0].set_title("Residuals (With Intercept)", fontsize=18)
+axes[1, 0].set_xlabel(r"$x$", fontsize=18)
+axes[1, 0].set_ylabel("Residuals", fontsize=18)
+axes[1, 0].grid(True)
+
+# Residuals Panel 2: Residuals without intercept
+axes[1, 1].scatter(x, residuals_without_intercept, alpha=0.5, color='purple', s=30)
+axes[1, 1].axhline(0, color='black', linestyle='-', linewidth=2)
+axes[1, 1].set_title("Residuals (Without Intercept)", fontsize=18)
+axes[1, 1].set_xlabel(r"$x$", fontsize=18)
+axes[1, 1].set_ylabel("Residuals", fontsize=18)
+axes[1, 1].grid(True)
+
+plt.tight_layout()
+
+# Save the figure as a PDF
+plt.savefig("reg_noconst_with_residuals_plots.pdf")
+plt.show()
+
+
+# %%

@@ -7,9 +7,9 @@
 | 37   | 09/09 (Mon)| Cont.                                      | W3.1-W3.6, W3.A6, <br>WE.1-WE.2, WD.1-WD.5        | [Problem set 2](2_class/PS2_EngelCurves)          | Thor       | Pedro      |
 | 37   | 10/09 (Tue)| [03 Multiple Linear Regression](1_lectures/03_mlr) |                                           | -                           | Thor       | Pedro      |
 | 37   | 13/09 (Fri)| Cont.                                      |                                                  | [Problem set 3](2_class/PS3_Growth)          | Thor       | Daniel     |
-| 38   | 16/09 (Mon)| [04 Inference in Regression](1_lectures/04_inference)| W4.1-W4.6, WC.5, WC.6                        | -                           | Thor       | Pedro      |
+| 38   | 16/09 (Mon)| [04 Inference in Regression](1_lectures/04_inference)| W4.1-W4.6, WC.5, WC.6                        | Assignment 1                           | Thor       | Pedro      |
 | 38   | 17/09 (Tue)| [05 Asymptotic Theory](1_lectures/05_asymptotics)| W5.1-W5.3, WC.3                               | Assignment 1                | Thor       | Pedro      |
-| 38   | 20/09 (Fri)| [06 Simulation](1_lectures/06_simulation)  | Jørgensen 2015                                   | Feedback on Assignment 1    | Thor       | Daniel     |
+| 38   | 20/09 (Fri)| [06 Simulation](1_lectures/06_simulation)  | Jørgensen 2015                                   | Walk-Through the assignment 1 & [Problem set 3](2_class/PS3_Growth)(Cont'd)    | Thor       | Daniel     |
 | 39   | 23/09 (Mon)| [07 Dummy Variables](1_lectures/07_dummyvars)| W7.1-W7.5                                      | [Problem set 4](2_class/PS4_MonteCarlo)          | Thor       | Pedro      |
 | 39   | 24/09 (Tue)| Cont.                                      |                                                   | [Problem set 5](2_class/PS5_Growth)          | Thor       | Pedro      |
 | 39   | 27/09 (Fri)| [00 Pisa Example](1_lectures/08_pisa)      |  W6.1-W6.3                                               | -                           | Thor       | Daniel     |

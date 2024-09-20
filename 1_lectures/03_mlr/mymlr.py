@@ -69,6 +69,30 @@ def ols(X, y):
     
     return results
 
+def output(results):
+    """
+    Prints OLS summary in a readable format.
+    
+    Parameters:
+    results (dict): Model results from the OLS function.
+    """
+    print(f"OLS Regression Results for Dependent Variable: {results['lbl_y']}")
+    print("="*60)
+    print(f"Number of Observations: {results['n']}")
+    print(f"Degrees of Freedom: {results['n'] - results['k']} (Residual), {results['k']} (Model)")
+    print(f"R-squared: {results['R_squared']:.4f}")
+    print(f"TSS: {results['TSS']:.4f}, RSS: {results['RSS']:.4f}, ESS: {results['ESS']:.4f}")
+    print("="*60)
+    print(f"{'Variable':<20}{'Coefficient':<15}{'Std. Error':<15}")
+    print("-"*60)
+    
+    for i, var in enumerate(results['lbl_X']):
+        beta = results['beta_hat'][i][0]
+        std_err = results['standard_errors'][i][0]
+        print(f"{var:<20}{beta:<15.4f}{std_err:<15.4f}")
+    
+    print("="*60)
+    
 
 def summary(models, options=None):
     """

@@ -2,247 +2,116 @@ import numpy as np
 import pandas as pd
 from collections import Counter
 from scipy import stats
+# Short-hand reference for inverse matrix
+inv = np.linalg.inv
 
-def ols(X, y, robust=False):
-    """
-    Perform OLS estimation using matrix algebra.
+def labels(vars):
+    labels = [var.to_frame().columns.tolist() if isinstance(var, pd.Series) else var.columns.tolist() for var in vars]
+    return labels
+
+def pd_to_arrays(vars):
+    arrays = [var.to_frame().values if isinstance(var, pd.Series) else var.values for var in vars]
+    return  arrays
+
+def ols(y,X, robust=False, quiet=True, title="OLS Regression Results"):
+    lbl_y, lbl_X = labels([y,X])
+    y,X= pd_to_arrays([y,X])
     
-    Parameters:
-    X (pd.DataFrame): Design matrix (independent variables), dimensions (n x k)
-    y (pd.Series): Dependent variable, dimensions (n x 1)
-
-    Returns:
-    dict: Model results including coefficients, standard errors, residuals, TSS, RSS, ESS, R²,
-          and variable names for both independent and dependent variables.
-    """
-
-    # Short-hand reference for inverse matrix
-    inv = np.linalg.inv
-
-    # Extract variable names from X and y
-    lbl_X = X.columns.tolist()  # Names of independent variables
-    lbl_y = y.name               # Name of dependent variable
-    # Ensure correct dimensions: X (n x k), y (n x 1)
-    X = X.values  # (n x k)
-    y = y.values.reshape(-1, 1)  # (n x 1)
-
-    # OLS estimates: β = (X'X)^(-1) X'y
+    # OLS estimator, predicted values, residuals
+    beta_hat = inv(X.T @ X) @ X.T @ y   # OLS estimator: β = (X'X)^(-1)X'y
+    u_hat = y - X @ beta_hat            # residuals: û = y - Xβ
+    var_beta_hat = var_cov_matrix(X, u_hat, robust)     # Variance-covariance matrix of β_hat
     
-    beta_hat = inv(X.T @ X) @ X.T @ y  # (k x 1)
-
-    # Predicted values: ŷ = Xβ
-    y_hat = X @ beta_hat  # (n x 1)
-
-    # Residuals: u = y - ŷ
-    residuals = y - y_hat  # (n x 1)
-
-    # Number of observations (n) and parameters (k)
-    n, k = X.shape
-
-    # Residual Sum of Squares (RSS): u'u
-    RSS = float(residuals.T @ residuals)  # scalar
-
-    # Total Sum of Squares (TSS): (y - ȳ)'(y - ȳ)
-    TSS = float(((y - y.mean()) ** 2).sum())  # scalar
-
-    # Explained Sum of Squares (ESS): TSS - RSS
-    ESS = TSS - RSS  # scalar
-
-    # R²: 1 - (RSS/TSS)
-    R_squared = 1 - (RSS / TSS)
-
-    # Variance of residuals: σ² = RSS / (n - k)
-    sigma_squared = RSS / (n - k)
-
-    if robust:
-        # HCSE: heteroskedasticity-consistent varians-kovarians matrix
-        Ainv = inv(X.T @ X / n)    # Beregn Ainv
-        Sigma = (X* (residuals**2)).T  @ X / n  # Matrix for beregning af Σ  
-        var_beta_hat = Ainv @ Sigma @ Ainv / (n - k)  # Returner HCSE varians-kovarians matrix
-    else:
-        # OLS varians-kovarians matrix under homoskedasticitet
-        sigma2 = np.sum(residuals**2) / (n - k)  # Estimeret fejlledsvarians
-        var_beta_hat = sigma2 * inv(X.T @ X)  # Returner standard OLS varians-kovarians matrix
-
-    # Standard errors of coefficients: sqrt(diag(σ² * (X'X)^(-1)))
-    standard_errors = np.sqrt(np.diag(var_beta_hat)).reshape(-1, 1)  # (k x 1)
-
-    # t-statistics: β / se(β)
-    t_stats = beta_hat / standard_errors
-
-    # Two-tailed p-values for t-stats
-    p_values = 2 * (1 - stats.t.cdf(np.abs(t_stats), df=n - k))
-
-    # Critical t-value for 95% confidence intervals
-    t_critical = stats.t.ppf(1 - 0.025, df=n - k)
-
-    # Confidence intervals
-    conf_intervals = np.hstack([
-        beta_hat - t_critical * standard_errors,
-        beta_hat + t_critical * standard_errors
-    ])
-
-    # Store results in a dictionary, including variable names for both X and y
-    results = {
-        'beta_hat': beta_hat,               # (k x 1)
-        'y_hat': y_hat,                     # (n x 1)
-        'residuals': residuals,             # (n x 1)
-        'var_beta_hat': var_beta_hat,       # (k x k)
-        'sigma_squared': sigma_squared,     # scalar
-        'standard_errors': standard_errors, # (k x 1)
-        't_stats': t_stats,                 # (k x 1)
-        'p_values': p_values,               # (k x 1)
-        'conf_intervals': conf_intervals,   # (k x 2)
-        'TSS': TSS,                         # scalar
-        'RSS': RSS,                         # scalar
-        'ESS': ESS,                         # scalar
-        'R_squared': R_squared,             # scalar
-        'n': n, 'k': k,                     # number of observations and parameters
-        'lbl_X': lbl_X,                     # Names of independent variables
-        'lbl_y': lbl_y                      # Name of dependent variable
-    }
-    
+    # Standard errors, t-stats, p-values, confidence intervals, TSS, RSS, ESS, R²
+    results = predict(y, X, beta_hat, var_beta_hat, u_hat, lbl_X, lbl_y, robust)
+    if not quiet: # Print OLS results
+        output(results, title=title)  
     return results
 
-def tsls(X1, X2, y, Ze, robust=False):
-    """
-    Perform Two-Stage Least Squares (2SLS) estimation using matrix algebra 
-    with options for robust, homoskedastic, and 2SLS-specific standard errors.
+def var_cov_matrix(X, u_hat, robust=False):
+    n, k = X.shape     # scalars, # of observations (n) and parameters (k)
+    if robust: # HCSE: heteroskedasticity-consistent varians-kovarians matrix
+        Ainv = inv(X.T @ X / n)    # Beregn Ainv
+        Sigma = (X* (u_hat**2)).T  @ X / n  # Matrix for beregning af Σ  
+        var_beta_hat = Ainv @ Sigma @ Ainv / (n - k)  # Returner HCSE varians-kovarians matrix
+    else: # OLS varians-kovarians matrix under homoskedasticitet
+        sigma2 = np.sum(u_hat**2) / (n - k)  # Estimeret fejlledsvarians
+        var_beta_hat = sigma2 * inv(X.T @ X)  # Returner standard OLS varians-kovarians matrix
+    return var_beta_hat
 
-    Model:
-    --------
-    The model is a two-equation system:
+def predict(y, X, beta_hat, var_beta_hat, u_hat, lbl_X, lbl_y, robust):
+    n, k = X.shape                      # of obs (n) and parameters (k)
 
-    1. First stage (instrumental regression for endogenous variables):
-       X2 = Ze * π + X1 * γ + error_1
-       
-       Where X2 are the endogenous variables and Ze are the excluded instruments.
-       
-    2. Second stage (regression for the dependent variable):
-       y = X1 * β1 + X2_hat * β2 + u
-       
-       Where X2_hat are the predicted values from the first stage, 
-       X1 are the exogenous variables, and y is the dependent variable.
+    # Standard errors, t-tests and confidence intervals    
+    y_hat = X @ beta_hat                # predicted values: ŷ = Xβ          
+    se = np.sqrt(np.diag(var_beta_hat)).reshape(-1, 1)  # Standard errors of β_hat
+    t_stats = beta_hat / se                             # t-stats: β / se(β)
+    p_values = 2 * (1 - stats.t.cdf(np.abs(t_stats), df=n - k))     # Two-tailed p-values for t-stats
+    t_crit = stats.t.ppf(1 - 0.025, df=n - k)                       # Critical t-value 
+    conf_intervals = np.hstack([beta_hat - t_crit * se, beta_hat + t_crit * se]) # Confidence intervals
 
-    Parameters:
-    ------------
-    X1 (pd.DataFrame): Exogenous variables, dimensions (n x k1)
-    X2 (pd.DataFrame): Endogenous variables, dimensions (n x k2)
-    y (pd.Series): Dependent variable (y), dimensions (n x 1)
-    Ze (pd.DataFrame): Excluded instruments for X2, dimensions (n x l)
-    Robust: Type of standard errors to compute:
-                    - True (default): Robust to heteroskedasticity and 2-stage estimation errors
-                    - False: Homoskedastic standard errors  
-    Returns:
-    ------------
-    dict: Model results including:
-          - Coefficients (beta_hat)
-          - Standard errors (based on the specified variance type)
-          - Residuals, predicted values, confidence intervals, and R-squared.
-    """
-    # Short-hand reference for inverse matrix
-    inv = np.linalg.inv
+    # Goodness-of-fit measures: R², TSS, RSS, ESS, σ²
+    RSS = float(u_hat.T @ u_hat)                # Residual Sum of Squares (RSS): u'u
+    TSS = float(((y - y.mean()) ** 2).sum())    # Total Sum of Squares (TSS): (y - ȳ)'(y - ȳ)
+    ESS = TSS - RSS                             # Explained Sum of Squares (ESS): TSS - RSS
+    R_squared = 1 - (RSS / TSS)                 # R²: 1 - (RSS/TSS)
+    sigma_squared = RSS / (n - k)               # Variance of u_hat: σ² = RSS / (n - k)
 
-    # Extract variable names from X1, X2, and y
-    lbl_X1 = X1.columns.tolist()  # Names of exogenous variables
-    lbl_X2 = X2.columns.tolist()  # Names of endogenous variables
-    lbl_X = lbl_X1 + lbl_X2  # Combine exogenous and endogenous variable names
-    lbl_y = y.name  # Name of dependent variable
-    lbl_Ze = Ze.columns.tolist()  # Names of excluded instruments
-    
-    # Convert to numpy arrays for matrix operations
-    X1 = X1.values  # Exogenous variables (n x k1)
-    X2 = X2.values  # Endogenous variables (n x k2)
-    Ze = Ze.values  # Excluded instruments (n x l)
-    y = y.values.reshape(-1, 1)  # Dependent variable (n x 1)
+    # Store results in a dictionary, including variable names for both X and y
+    results = {'beta_hat': beta_hat, 'se': se, 'sigma_squared': sigma_squared, 'var_beta_hat': var_beta_hat, 
+               't_stats': t_stats,  'p_values': p_values,'conf_intervals': conf_intervals,  
+               'TSS': TSS,    'RSS': RSS,    'ESS': ESS,    'R_squared': R_squared,
+               'n': n, 'k': k,'lbl_X': lbl_X,'lbl_y': lbl_y,
+               'y_hat': y_hat, 'u_hat': u_hat
+               }
+    return results
 
-    # First stage: Regress X2 (endogenous variables) on Ze (excluded instruments) and X1 (exogenous variables)
-    # Combine excluded instruments (Ze) and exogenous variables (X1) to form the full instrument matrix
-    Z = np.hstack([Ze, X1])  # (n x (l + k1))
+def first_stage(y, X1, X2, Ze, robust=False, quiet=True):
+    y, X1, X2, Ze = [pd.DataFrame(var) for var in [y, X1, X2, Ze]]
+    Z = pd.concat([X1, Ze], axis=1)
+    results = []
+    for i, var in enumerate(X2.columns):
+        # OLS regression of each endogenous variable on all exogenous variables and instruments
+        res = ols(y=X2.loc[:, var], X=Z, robust=robust, quiet=quiet, title=f"First Stage for {var}")
+        results.append(res)
+
+        # F-test for joint significance of instruments    
+        res_r = ols(y=X2.loc[:, var], X=Ze, robust=robust, quiet=True)
+        title_F = f"F-test for joint significance of instruments: {var}"
+        F_stat, p_value= Ftest(res, res_r, quiet=quiet, title=title_F)
+    return results
+
+def tsls(y, X1, X2, Ze, robust=False, quiet=True, title="2SLS Regression Results"):
+    y, X1, X2, Ze = [pd.DataFrame(var) for var in [y, X1, X2, Ze]]
+    X = pd.concat([X1, X2], axis=1)     # Combine X1 and X2 (n x (k1 + k2))
+    Z = pd.concat([X1, Ze], axis=1)     # Combine X1 and X2 (n x (k1 + k2))
+    lbl_y, lbl_X1, lbl_X2, lbl_Ze, lbl_X, lbl_Z = labels([y, X1, X2, Ze, X, Z]) # Extract variable names
+    y, X1, X2, Ze, X, Z = pd_to_arrays([y, X1, X2, Ze, X, Z]) # Convert to arrays
 
     # Predicted values for endogenous variables from the first stage (X2_hat)
-    X2_hat = Z @ inv(Z.T @ Z) @ Z.T @ X2  # (n x k2)
-
-    # Second stage: Regress y on X1 (exogenous) and X2_hat (predicted endogenous variables)
-    X_hat = np.hstack([X1, X2_hat])  # Combine X1 and predicted X2_hat (n x (k1 + k2))
+    Pz = Z @ inv(Z.T @ Z) @ Z.T  # (n x n) projection matrix (to get X predicted by Z)
+    X_hat = Pz @ X  # (n x k2)
     
-    # Estimate beta_hat using OLS: β = (X'X)^(-1) X'y
-    beta_hat = inv(X_hat.T @ X_hat) @ X_hat.T @ y  # (k1 + k2 x 1)
+    # Estimate beta_hat using "2SLS" formula: β = (X'PzX)^(-1) * X'Pz*y
+    beta_2SLS = inv(X.T@Pz@X) @ X.T@Pz@y  # (k1 + k2 x 1)
+    u_hat = y - X @ beta_2SLS            # residuals: û = y - Xβ (use X instead of X_hat)
+    var_beta_hat = var_cov_matrix(X_hat, u_hat, robust)     # Variance-covariance matrix of β_hat
+
+    # Standard errors, t-stats, p-values, confidence intervals, TSS, RSS, ESS, R²
+    results = predict(y, X, beta_2SLS, var_beta_hat, u_hat, lbl_X, lbl_y, robust)
     
-    # Predicted values for y: ŷ = X * β
-    y_hat = X_hat @ beta_hat  # (n x 1)
-    
-    # Residuals: u = y - ŷ
-    residuals = y - y_hat  # (n x 1)
+    # Saran test for overidentification
+    s2=float(results['RSS']/results['n'])  # Residual variance estimate
+    W = inv(s2*Z.T @ Z)  # Weighting matrix for J-statistic
+    J_stat = float(u_hat.T @ Z @ W @ Z.T@u_hat)  # J-statistic for overidentification test
+    results['J_stat'] = J_stat
+    pval_Jstat = 1 - stats.chi2.cdf(J_stat, len(lbl_Ze)-len(lbl_X2))  # P-value for J-statistic
 
-    # Number of observations (n) and parameters (k1 + k2)
-    n, k = X_hat.shape
-
-    # Total Sum of Squares (TSS): (y - ȳ)'(y - ȳ)
-    TSS = float(((y - y.mean()) ** 2).sum())  # scalar
-
-    # Residual Sum of Squares (RSS): u'u
-    RSS = float(residuals.T @ residuals)  # scalar
-
-    # Explained Sum of Squares (ESS): TSS - RSS
-    ESS = TSS - RSS  # scalar
-
-    # R²: 1 - (RSS/TSS)
-    R_squared = 1 - (RSS / TSS)
-
-    # Variance of residuals: σ² = RSS / (n - k)
-    sigma_squared = RSS / (n - k)
-    
-    # Handle different variance estimators based on var_type argument
-    if robust:
-        # Robust OLS variance (heteroskedasticity-robust)
-        Ainv = inv(X_hat.T @ X_hat / n)    # Inverse of (X'X)
-        Sigma = (X_hat* (residuals**2)).T  @ X_hat / n  # Matrix for beregning af Σ  
-        var_beta_hat = Ainv @ Sigma @ Ainv / (n - k)    
-    else:
-        # Homoskedastic variance-covariance matrix
-        sigma_squared = float((residuals.T @ residuals) / (n - k))  # Residual variance
-        var_beta_hat = sigma_squared * inv(X_hat.T @ X_hat)
-    
-    # Standard errors of coefficients
-    standard_errors = np.sqrt(np.diag(var_beta_hat)).reshape(-1, 1)  # (k1 + k2 x 1)
-
-    # t-statistics: β / se(β)
-    t_stats = beta_hat / standard_errors
-
-    # Two-tailed p-values for t-stats
-    p_values = 2 * (1 - stats.t.cdf(np.abs(t_stats), df=n - k))
-
-    # Critical t-value for 95% confidence intervals
-    t_critical = stats.t.ppf(1 - 0.025, df=n - k)
-
-    # Confidence intervals
-    conf_intervals = np.hstack([
-        beta_hat - t_critical * standard_errors,
-        beta_hat + t_critical * standard_errors
-    ])
-
-    # Store results in a dictionary
-    results = {
-        'beta_hat': beta_hat,               # (k1 + k2 x 1)
-        'y_hat': y_hat,                     # (n x 1)
-        'residuals': residuals,             # (n x 1)
-        'sigma_squared': sigma_squared,     # scalar
-        'var_beta_hat': var_beta_hat,       # (k1 + k2 x k1 + k2)
-        'standard_errors': standard_errors, # Standard errors based on var_type (k1 + k2 x 1)
-        't_stats': t_stats,                 # (k1 + k2 x 1)
-        'p_values': p_values,               # (k1 + k2 x 1)
-        'conf_intervals': conf_intervals,   # (k1 + k2 x 2)
-        'TSS': TSS,                         # scalar
-        'RSS': RSS,                         # scalar
-        'ESS': ESS,                         # scalar
-        'R_squared': R_squared,             # scalar
-        'n': n, 'k': k,                     # number of observations and parameters
-        'lbl_X': lbl_X,                     # Combined exogenous and endogenous variable names
-        'lbl_Ze': lbl_Ze,                   # Names of excluded instruments
-        'lbl_y': lbl_y                  # Name of dependent variable   
-   }
-
+    results['pval_Jstat'] = pval_Jstat
+    if not quiet: # Print 2SLS results
+        output(results, title="2SLS Regression Results")
+        print(f'Sargant test for overidentification, J={J_stat:.10f} ~ Chi2({len(lbl_Ze)-len(lbl_X2)})') 
+        print(f'P-value for Sargan test: {pval_Jstat:.4f}\n')
     return results
 
 def output(results, title="OLS Regression Results"):
@@ -267,7 +136,7 @@ def output(results, title="OLS Regression Results"):
     
     for i, var in enumerate(results['lbl_X']):
         beta = results['beta_hat'][i][0]
-        std_err = results['standard_errors'][i][0]
+        std_err = results['se'][i][0]
         t_stat = results['t_stats'][i][0]
         p_val = results['p_values'][i][0]
         conf_low = results['conf_intervals'][i][0]
@@ -287,7 +156,7 @@ def summary(models, options=None, column_titles=None, report_stats="se"):
     Parameters:
     models (list): A list of OLS/2SLS result dictionaries (e.g., [mlr1, mlr2, mlr3]).
     options (list, optional): Fields to include in the output (default is all fields).
-                              Example: ['beta_hat', 'standard_errors', 'R_squared'].
+                              Example: ['beta_hat', 'se', 'R_squared'].
     column_titles (list, optional): Custom column titles for each model. Defaults to 'Model 1', 'Model 2', etc.
     report_stats (str, optional): Options are "se" (default), "t", or None.
                                   "se" reports standard errors in parentheses.
@@ -295,7 +164,7 @@ def summary(models, options=None, column_titles=None, report_stats="se"):
                                   None leaves parentheses empty.
     """
     # Default fields to include if options is None
-    default_fields = ['beta_hat', 'standard_errors', 'R_squared', 'TSS', 'RSS', 'ESS', 'n']
+    default_fields = ['beta_hat', 'se', 'R_squared', 'TSS', 'RSS', 'ESS', 'n']
     fields = options if options else default_fields
 
     # Collect all unique regressors across models and count their occurrences
@@ -327,7 +196,7 @@ def summary(models, options=None, column_titles=None, report_stats="se"):
                 idx = model['lbl_X'].index(regressor)
                 coef = model['beta_hat'][idx][0]  # Coefficient
                 if report_stats == "se":
-                    stat = model['standard_errors'][idx][0]  # Standard error
+                    stat = model['se'][idx][0]  # Standard error
                     row_stats.append(f"({stat:.4f})")
                 elif report_stats == "t":
                     stat = model['t_stats'][idx][0]  # t-statistic
@@ -365,3 +234,18 @@ def summary(models, options=None, column_titles=None, report_stats="se"):
         print("Note: Standard errors are reported in parentheses.\n")
     elif report_stats == "t":
         print("Note: t-statistics are reported in parentheses.\n")
+
+
+def Ftest(m_ur, m_r, quiet=True, title="F-test for Joint Significance"):
+    # m_ur, m_r: estimation results for unrestricted and restricted models
+    RSS_ur, k_ur, n  = m_ur['RSS'], m_ur['k'], m_ur['n']    
+    RSS_r, k_r = m_r['RSS'], m_r['k']
+    q = k_ur - k_r # Number of restrictions (q) 
+
+    F_stat = ((RSS_r - RSS_ur) / q) / (RSS_ur / (n - k_ur))
+    p_value = 1 - stats.f.cdf(F_stat, q, n - k_ur)  # P-value for F-statistic
+    if not quiet:
+        print(f"{title}")
+        print(f"  F-statistic: {F_stat:.4f} ~ F({q:d},{n - k_ur:d})")
+        print(f"  P-value: {p_value:.4f}")
+    return F_stat, p_value

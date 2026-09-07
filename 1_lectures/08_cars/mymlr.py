@@ -12,7 +12,7 @@ def ols(y, X):
     X (pd.DataFrame): Design matrix, dimensions (n x p)
 
     Returns:
-    dict: Model results including coefficients, standard errors, residuals, SST, SSE, SSR, R²,
+    dict: Model results including coefficients, standard errors, residuals, SST, SSR, SSE, R²,
           and variable names for both independent and dependent variables.
     """
     # Extract variable names from X and y
@@ -35,22 +35,22 @@ def ols(y, X):
     n, p = X.shape
     df_resid = n - p
 
-    # Sum of Squared Residuals (SSR): u'u
+    # Sum of Squared Residuals (SSE): u'u
     # The matrix product is 1 x 1; squeeze removes the redundant dimensions
-    SSR = np.squeeze(u_hat.T @ u_hat)  # scalar
+    SSE = np.squeeze(u_hat.T @ u_hat)  # scalar
 
     # Total Sum of Squares (SST): (y - ȳ)'(y - ȳ)
     y_centered = y - y.mean()
     SST = np.squeeze(y_centered.T @ y_centered)  # scalar
 
-    # Explained Sum of Squares (SSE): SST - SSR
-    SSE = SST - SSR  # scalar
+    # Explained Sum of Squares (SSR): SST - SSE
+    SSR = SST - SSE  # scalar
 
-    # R²: SSE/SST = 1 - SSR/SST
-    R_squared = 1 - (SSR / SST)
+    # R²: SSR/SST = 1 - SSE/SST
+    R_squared = 1 - (SSE / SST)
 
-    # Estimated error variance: sigmâ² = SSR / (n - p)
-    sigma_squared = SSR / df_resid
+    # Estimated error variance: sigmâ² = SSE / (n - p)
+    sigma_squared = SSE / df_resid
 
     # Standard errors of coefficients: sqrt(diag(σ² * (X'X)^(-1)))
     var_beta_hat = sigma_squared * np.linalg.inv(X.T @ X)  # (p x p)
@@ -77,8 +77,8 @@ def ols(y, X):
         'p_values': p_values,               # (p x 1)
         'conf_intervals': conf_intervals,   # (p x 2)
         'SST': SST,                         # scalar
-        'SSE': SSE,                         # scalar
         'SSR': SSR,                         # scalar
+        'SSE': SSE,                         # scalar
         'R_squared': R_squared,             # scalar
         'n': n, 'p': p,                     # observations and parameters
         'df_resid': df_resid,               # residual degrees of freedom
@@ -100,7 +100,7 @@ def output(results):
     print(f"Number of Observations: {results['n']}")
     print(f"Residual Degrees of Freedom: {results['df_resid']}")
     print(f"R-squared: {results['R_squared']:.4f}")
-    print(f"SST: {results['SST']:.4f}, SSE: {results['SSE']:.4f}, SSR: {results['SSR']:.4f}")
+    print(f"SST: {results['SST']:.4f}, SSR: {results['SSR']:.4f}, SSE: {results['SSE']:.4f}")
     print("="*98)
     print(f"{'Variable':<20}{'Coefficient':>15}{'Std. Error':>15}{'t':>12}{'P>|t|':>12}{'95% Conf. Interval':>22}")
     print("-"*98)
@@ -126,7 +126,7 @@ def summary(models, options=None):
                               Example: ['beta_hat', 'se', 'R_squared']
     """
     # Default fields to include if options is None
-    default_fields = ['beta_hat', 'se', 'R_squared', 'SST', 'SSE', 'SSR', 'n']
+    default_fields = ['beta_hat', 'se', 'R_squared', 'SST', 'SSR', 'SSE', 'n']
     fields = options if options else default_fields
 
     # Collect all unique regressors across models and count their occurrences
@@ -166,7 +166,7 @@ def summary(models, options=None):
         table.append(row_se)
 
     # Rows for scalar metrics like R_squared, SST, etc.
-    scalar_metrics = ['R_squared', 'SST', 'SSE', 'SSR', 'n']
+    scalar_metrics = ['R_squared', 'SST', 'SSR', 'SSE', 'n']
     for metric in scalar_metrics:
         if metric in fields:
             row_metric = [metric]
@@ -185,13 +185,13 @@ def summary(models, options=None):
         print(df.to_string(index=False, header=False))
 
 def Ftest(m_ur, m_r, quiet=True, title="F-test for Joint Significance"):
-    """Classical F-test based on unrestricted and restricted SSR."""
-    SSR_ur = m_ur['SSR']
-    SSR_r = m_r['SSR']
+    """Classical F-test based on unrestricted and restricted SSE."""
+    SSE_ur = m_ur['SSE']
+    SSE_r = m_r['SSE']
     q = m_ur['p'] - m_r['p']
     df_resid = m_ur['df_resid']
 
-    F_stat = ((SSR_r - SSR_ur) / q) / (SSR_ur / df_resid)
+    F_stat = ((SSE_r - SSE_ur) / q) / (SSE_ur / df_resid)
     p_value = 1 - stats.f.cdf(F_stat, q, df_resid)
 
     if not quiet:

@@ -166,7 +166,7 @@ def plot_regression(df, xvar, yvar, axs, mode='scatter', labels=None):
         ax = axs[row, col]
         
         # Estimer OLS ved hjælp af mymlr
-        res = mlr.ols(df[['const', xvar[i]]], df[y_col])
+        res = mlr.ols(y=df[y_col], X=df[['const', xvar[i]]])
         
         x = df[xvar[i]]
         
@@ -175,10 +175,10 @@ def plot_regression(df, xvar, yvar, axs, mode='scatter', labels=None):
             ax.scatter(x, df[y_col], color='navy', alpha=0.4)
             ax.plot(x, res['y_hat'], color='darkred')
         elif mode == 'residuals':
-            ax.scatter(x, res['residuals'], color='navy', alpha=0.4)
+            ax.scatter(x, res['u_hat'], color='navy', alpha=0.4)
             ax.plot(x, np.zeros_like(x), color='darkred')
         elif mode == 'squared residuals':
-            ax.scatter(x, res['residuals']**2, color='navy', alpha=0.4)
+            ax.scatter(x, res['u_hat']**2, color='navy', alpha=0.4)
             ax.plot(x, np.zeros_like(x), color='darkred')
         
         # Tilføj titel og aksetiketter
@@ -212,14 +212,14 @@ from scipy.stats import chi2  # Import chi2 for the Breusch-Pagan test
 # Funktion til Breusch-Pagan testet
 def breusch_pagan_test(df, y_col, x_col):
     # Estimer OLS modellen og gem residualerne
-    res = mlr.ols(df[[x_col, 'const']], df[y_col])
-    residuals = res['residuals']
+    res = mlr.ols(y=df[y_col], X=df[[x_col, 'const']])
+    residuals = res['u_hat']
 
     # Kvadrerede residualer
     df['u2'] = residuals ** 2
 
     # Estimer en model med de kvadrerede residualer som afhængig variabel
-    aux_model = mlr.ols(df[[x_col, 'const']], df['u2'])
+    aux_model = mlr.ols(y=df['u2'], X=df[[x_col, 'const']])
     r_squared = aux_model['R_squared']
 
     # Antal observationer (n) og antal forklarende variable (k)

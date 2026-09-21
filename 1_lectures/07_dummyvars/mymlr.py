@@ -184,18 +184,36 @@ def summary(models, options=None):
     with pd.option_context('display.colheader_justify', 'center'):
         print(df.to_string(index=False, header=False))
 
-def Ftest(m_ur, m_r, quiet=True, title="F-test for Joint Significance"):
-    """Classical F-test based on unrestricted and restricted SSR."""
+def Ftest(y, X_ur, X_r, alpha=0.05):
+    """F-test of the restrictions imposed by X_r relative to X_ur."""
+    m_ur = ols(y, X_ur)
+    m_r = ols(y, X_r)
+
     SSR_ur = m_ur['SSR']
     SSR_r = m_r['SSR']
     q = m_ur['p'] - m_r['p']
     df_resid = m_ur['df_resid']
 
     F_stat = ((SSR_r - SSR_ur) / q) / (SSR_ur / df_resid)
-    p_value = 1 - stats.f.cdf(F_stat, q, df_resid)
+    p_value = stats.f.sf(F_stat, q, df_resid)
+    critical_value = stats.f.ppf(1 - alpha, q, df_resid)
 
-    if not quiet:
-        print(title)
-        print(f"  F-statistic: {F_stat:.4f} ~ F({q:d}, {df_resid:d})")
-        print(f"  P-value: {p_value:.4f}")
+    print(f"F-test: F({q:d}, {df_resid:d}) = {F_stat:.4f}")
+    print(f"{100 * alpha:g}% critical value = {critical_value:.4f}, p-value = {p_value:.4f}")
     return F_stat, p_value
+
+
+def Waldtest(y, X_ur, R, r, alpha=0.05):
+    """Wald test of the linear hypothesis H0: R beta = r."""
+    m_ur = ols(y, X_ur)
+    q = R.shape[0]
+
+    d = R @ m_ur['beta_hat'] - r
+    V_d = R @ m_ur['var_beta_hat'] @ R.T
+    Wald = np.squeeze(d.T @ np.linalg.solve(V_d, d))
+    p_value = stats.chi2.sf(Wald, q)
+    critical_value = stats.chi2.ppf(1 - alpha, q)
+
+    print(f"Wald test: chi2({q:d}) = {Wald:.4f}")
+    print(f"{100 * alpha:g}% critical value = {critical_value:.4f}, p-value = {p_value:.4f}")
+    return Wald, p_value

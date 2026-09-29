@@ -1,7 +1,6 @@
 # %% 
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
 
 # Set seed for reproducibility
 np.random.seed(0)
@@ -32,13 +31,12 @@ alpha_value = 0.4  # Transparency for the scatter points
 
 # Fit a linear model for plotting the regression line
 def fit_and_plot(x, y, ax, label, xtics=True, ytics=True):
-    model = LinearRegression()
-    model.fit(x.reshape(-1, 1), y)
-    y_pred = model.predict(x.reshape(-1, 1))
+    b1, b0 = np.polyfit(x, y, 1)
+    order = np.argsort(x)
     
     # Plot scatter points with transparency and regression line
     ax.scatter(x, y, color=scatter_color, alpha=alpha_value)
-    ax.plot(x, y_pred, color=line_color)
+    ax.plot(x[order], b0 + b1 * x[order], color=line_color)
     ax.set_title(label, fontsize=20)
     ax.set_xlim([2, 6])
     ax.set_ylim([0, 20])
@@ -155,41 +153,35 @@ uC = np.random.normal(0, 2.5, size=len(x))
 uD = np.random.normal(0, 0.25 + 0.75 * (6 - x), size=len(x))
 data = pd.DataFrame({'x': x, 'yA': y + uA, 'yB': y + uB, 'yC': y + uC, 'yD': y + uD, 'const': 1})
 
-# Kompakt funktion til at plotte flere variable
-def plot_regression(df, xvar, yvar, axs, mode='scatter', labels=None):
-    if labels is None:
-        labels = yvar
-    
-    # Gennemløb for hver variabel (f.eks. yA, yB, osv.)
-    for i, y_col in enumerate(yvar):
-        row, col = divmod(i, 2)  # Arranger plottene i et 2x2 grid
-        ax = axs[row, col]
-        
-        # Estimer OLS ved hjælp af mymlr
-        res = mlr.ols(y=df[y_col], X=df[['const', xvar[i]]])
-        
-        x = df[xvar[i]]
-        
-        # Plot afhængig af mode (scatter, residuals eller squared residuals)
-        if mode == 'y':
-            ax.scatter(x, df[y_col], color='navy', alpha=0.4)
-            ax.plot(x, res['y_hat'], color='darkred')
-        elif mode == 'residuals':
-            ax.scatter(x, res['u_hat'], color='navy', alpha=0.4)
-            ax.plot(x, np.zeros_like(x), color='darkred')
-        elif mode == 'squared residuals':
-            ax.scatter(x, res['u_hat']**2, color='navy', alpha=0.4)
-            ax.plot(x, np.zeros_like(x), color='darkred')
-        
-        # Tilføj titel og aksetiketter
-        ax.set_title(labels[i], fontsize=14)
-        ax.set_xlim([2, 6])
-        ax.set_xlabel('x')
-        ax.set_ylabel(mode)
+# Plot y, residualer eller kvadrerede residualer for de fire DGP'er
+def plot_diagnostics(df, xvar, yvar, mode='y', bins=10, raw=True,
+                     binned=True, regression=True, labels=None, save=None):
+    labels = yvar if labels is None else labels
+    fig, axes = plt.subplots(2, 2, figsize=(9, 6))
 
-    # Optimer layout og gem plottet
-    plt.tight_layout()
-    plt.savefig(f'examples/Heteroskedasticitet_{mode}.pdf')
+    for i, (x_col, y_col, ax) in enumerate(zip(xvar, yvar, axes.ravel())):
+        m = mlr.ols(df[y_col], df[['const', x_col]])
+        if mode == 'y':
+            z, ylabel = df[y_col], 'y'
+        elif mode == 'residuals':
+            z, ylabel = m['u_hat'].ravel(), r'Residual $\hat u$'
+            ax.axhline(0, color='black', linewidth=1)
+        elif mode == 'squared residuals':
+            z, ylabel = m['u_hat'].ravel() ** 2, r'Squared residual $\hat u^2$'
+        else:
+            raise ValueError("mode must be 'y', 'residuals' or 'squared residuals'")
+
+        # Gør residualerne tydeligere end observationerne i det almindelige scatterplot
+        raw_size, raw_alpha = (12, 0.25) if mode != 'y' else (5, 0.08)
+        mlr.binscatter(df[x_col], z, bins=bins, ax=ax, raw=raw,
+                       binned=binned, regression=regression,
+                       raw_size=raw_size, raw_alpha=raw_alpha, raw_color='navy',
+                       xlabel=x_col, ylabel=ylabel, title=labels[i])
+        ax.set_xlim(2, 6)
+
+    fig.tight_layout()
+    if save is not None:
+        fig.savefig(save)
     plt.show()
 
 # Brug af funktionen
@@ -197,11 +189,17 @@ yvar = ['yA', 'yB', 'yC', 'yD']
 xvar = ['x', 'x', 'x', 'x']
 labels = ['A', 'B', 'C', 'D']
 
-# Loop gennem de forskellige modes (scatter, residuals, squared residuals)
-modes = ['y', 'residuals', 'squared residuals']
-for mode in modes:
-    fig, axs = plt.subplots(2, 2, figsize=(9, 6))  # Opret subplot for hvert mode
-    plot_regression(data, xvar, yvar, axs, mode=mode, labels=labels)  # Kald funktionen for hvert mode
+# Plot y med regressionslinjer
+plot_diagnostics(data, xvar, yvar, mode='y', labels=labels,
+                 save='examples/Heteroskedasticitet_y.pdf')
+
+# Plot residualer uden regressionslinjer
+plot_diagnostics(data, xvar, yvar, mode='residuals', regression=False,
+                 labels=labels, save='examples/Heteroskedasticitet_residuals.pdf')
+
+# Plot kvadrerede residualer med regressionslinjer
+plot_diagnostics(data, xvar, yvar, mode='squared residuals', labels=labels,
+                 save='examples/Heteroskedasticitet_squared residuals.pdf')
 # %% -------------------------------------------
 # Breusch-Pagan testet
 # ----------------------------------------------

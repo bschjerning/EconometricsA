@@ -12,7 +12,7 @@ def ols(y, X):
     X (pd.DataFrame): Design matrix, dimensions (n x p)
 
     Returns:
-    dict: Model results including coefficients, standard errors, residuals, SST, SSR, SSE, R²,
+    dict: Model results including coefficients, standard errors, residuals, SST, SSE, SSR, R²,
           and variable names for both independent and dependent variables.
     """
     # Extract variable names from X and y
@@ -35,22 +35,22 @@ def ols(y, X):
     n, p = X.shape
     df_resid = n - p
 
-    # Sum of Squared Residuals (SSE): u'u
+    # Sum of Squared Residuals (SSR): u'u
     # The matrix product is 1 x 1; squeeze removes the redundant dimensions
-    SSE = np.squeeze(u_hat.T @ u_hat)  # scalar
+    SSR = np.squeeze(u_hat.T @ u_hat)  # scalar
 
     # Total Sum of Squares (SST): (y - ȳ)'(y - ȳ)
     y_centered = y - y.mean()
     SST = np.squeeze(y_centered.T @ y_centered)  # scalar
 
-    # Explained Sum of Squares (SSR): SST - SSE
-    SSR = SST - SSE  # scalar
+    # Explained Sum of Squares (SSE): SST - SSR
+    SSE = SST - SSR  # scalar
 
-    # R²: SSR/SST = 1 - SSE/SST
-    R_squared = 1 - (SSE / SST)
+    # R²: SSE/SST = 1 - SSR/SST
+    R_squared = 1 - (SSR / SST)
 
-    # Estimated error variance: sigmâ² = SSE / (n - p)
-    sigma_squared = SSE / df_resid
+    # Estimated error variance: sigmâ² = SSR / (n - p)
+    sigma_squared = SSR / df_resid
 
     # Standard errors of coefficients: sqrt(diag(σ² * (X'X)^(-1)))
     var_beta_hat = sigma_squared * np.linalg.inv(X.T @ X)  # (p x p)
@@ -77,8 +77,8 @@ def ols(y, X):
         'p_values': p_values,               # (p x 1)
         'conf_intervals': conf_intervals,   # (p x 2)
         'SST': SST,                         # scalar
-        'SSR': SSR,                         # scalar
         'SSE': SSE,                         # scalar
+        'SSR': SSR,                         # scalar
         'R_squared': R_squared,             # scalar
         'n': n, 'p': p,                     # observations and parameters
         'df_resid': df_resid,               # residual degrees of freedom
@@ -100,7 +100,7 @@ def output(results):
     print(f"Number of Observations: {results['n']}")
     print(f"Residual Degrees of Freedom: {results['df_resid']}")
     print(f"R-squared: {results['R_squared']:.4f}")
-    print(f"SST: {results['SST']:.4f}, SSR: {results['SSR']:.4f}, SSE: {results['SSE']:.4f}")
+    print(f"SST: {results['SST']:.4f}, SSE: {results['SSE']:.4f}, SSR: {results['SSR']:.4f}")
     print("="*98)
     print(f"{'Variable':<20}{'Coefficient':>15}{'Std. Error':>15}{'t':>12}{'P>|t|':>12}{'95% Conf. Interval':>22}")
     print("-"*98)
@@ -126,7 +126,7 @@ def summary(models, options=None):
                               Example: ['beta_hat', 'se', 'R_squared']
     """
     # Default fields to include if options is None
-    default_fields = ['beta_hat', 'se', 'R_squared', 'SST', 'SSR', 'SSE', 'n']
+    default_fields = ['beta_hat', 'se', 'R_squared', 'SST', 'SSE', 'SSR', 'n']
     fields = options if options else default_fields
 
     # Collect all unique regressors across models and count their occurrences
@@ -166,7 +166,7 @@ def summary(models, options=None):
         table.append(row_se)
 
     # Rows for scalar metrics like R_squared, SST, etc.
-    scalar_metrics = ['R_squared', 'SST', 'SSR', 'SSE', 'n']
+    scalar_metrics = ['R_squared', 'SST', 'SSE', 'SSR', 'n']
     for metric in scalar_metrics:
         if metric in fields:
             row_metric = [metric]
@@ -184,18 +184,36 @@ def summary(models, options=None):
     with pd.option_context('display.colheader_justify', 'center'):
         print(df.to_string(index=False, header=False))
 
-def Ftest(m_ur, m_r, quiet=True, title="F-test for Joint Significance"):
-    """Classical F-test based on unrestricted and restricted SSE."""
-    SSE_ur = m_ur['SSE']
-    SSE_r = m_r['SSE']
+def Ftest(y, X_ur, X_r, alpha=0.05):
+    """F-test of the restrictions imposed by X_r relative to X_ur."""
+    m_ur = ols(y, X_ur)
+    m_r = ols(y, X_r)
+
+    SSR_ur = m_ur['SSR']
+    SSR_r = m_r['SSR']
     q = m_ur['p'] - m_r['p']
     df_resid = m_ur['df_resid']
 
-    F_stat = ((SSE_r - SSE_ur) / q) / (SSE_ur / df_resid)
-    p_value = 1 - stats.f.cdf(F_stat, q, df_resid)
+    F_stat = ((SSR_r - SSR_ur) / q) / (SSR_ur / df_resid)
+    p_value = stats.f.sf(F_stat, q, df_resid)
+    critical_value = stats.f.ppf(1 - alpha, q, df_resid)
 
-    if not quiet:
-        print(title)
-        print(f"  F-statistic: {F_stat:.4f} ~ F({q:d}, {df_resid:d})")
-        print(f"  P-value: {p_value:.4f}")
+    print(f"F-test: F({q:d}, {df_resid:d}) = {F_stat:.4f}")
+    print(f"{100 * alpha:g}% critical value = {critical_value:.4f}, p-value = {p_value:.4f}")
     return F_stat, p_value
+
+
+def Waldtest(y, X_ur, R, r, alpha=0.05):
+    """Wald test of the linear hypothesis H0: R beta = r."""
+    m_ur = ols(y, X_ur)
+    q = R.shape[0]
+
+    d = R @ m_ur['beta_hat'] - r
+    V_d = R @ m_ur['var_beta_hat'] @ R.T
+    Wald = np.squeeze(d.T @ np.linalg.solve(V_d, d))
+    p_value = stats.chi2.sf(Wald, q)
+    critical_value = stats.chi2.ppf(1 - alpha, q)
+
+    print(f"Wald test: chi2({q:d}) = {Wald:.4f}")
+    print(f"{100 * alpha:g}% critical value = {critical_value:.4f}, p-value = {p_value:.4f}")
+    return Wald, p_value

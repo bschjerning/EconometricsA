@@ -184,11 +184,8 @@ def summary(models, options=None):
     with pd.option_context('display.colheader_justify', 'center'):
         print(df.to_string(index=False, header=False))
 
-def Ftest(y, X_ur, X_r, alpha=0.05):
-    """F-test of the restrictions imposed by X_r relative to X_ur."""
-    m_ur = ols(y, X_ur)
-    m_r = ols(y, X_r)
-
+def Ftest(m_ur, m_r, alpha=0.05):
+    """F-test based on unrestricted and restricted OLS results."""
     SSR_ur = m_ur['SSR']
     SSR_r = m_r['SSR']
     q = m_ur['p'] - m_r['p']
@@ -203,9 +200,8 @@ def Ftest(y, X_ur, X_r, alpha=0.05):
     return F_stat, p_value
 
 
-def Waldtest(y, X_ur, R, r, alpha=0.05):
+def Waldtest(m_ur, R, r, alpha=0.05):
     """Wald test of the linear hypothesis H0: R beta = r."""
-    m_ur = ols(y, X_ur)
     q = R.shape[0]
 
     d = R @ m_ur['beta_hat'] - r

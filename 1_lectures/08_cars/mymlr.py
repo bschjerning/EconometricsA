@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from collections import Counter
 from scipy import stats
 
@@ -12,7 +13,7 @@ def ols(y, X):
     X (pd.DataFrame): Design matrix, dimensions (n x p)
 
     Returns:
-    dict: Model results including coefficients, standard errors, residuals, SST, SSR, SSE, R²,
+    dict: Model results including coefficients, standard errors, residuals, SST, SSE, SSR, R²,
           and variable names for both independent and dependent variables.
     """
     # Extract variable names from X and y
@@ -35,22 +36,22 @@ def ols(y, X):
     n, p = X.shape
     df_resid = n - p
 
-    # Sum of Squared Residuals (SSE): u'u
+    # Sum of Squared Residuals (SSR): u'u
     # The matrix product is 1 x 1; squeeze removes the redundant dimensions
-    SSE = np.squeeze(u_hat.T @ u_hat)  # scalar
+    SSR = np.squeeze(u_hat.T @ u_hat)  # scalar
 
     # Total Sum of Squares (SST): (y - ȳ)'(y - ȳ)
     y_centered = y - y.mean()
     SST = np.squeeze(y_centered.T @ y_centered)  # scalar
 
-    # Explained Sum of Squares (SSR): SST - SSE
-    SSR = SST - SSE  # scalar
+    # Explained Sum of Squares (SSE): SST - SSR
+    SSE = SST - SSR  # scalar
 
-    # R²: SSR/SST = 1 - SSE/SST
-    R_squared = 1 - (SSE / SST)
+    # R²: SSE/SST = 1 - SSR/SST
+    R_squared = 1 - (SSR / SST)
 
-    # Estimated error variance: sigmâ² = SSE / (n - p)
-    sigma_squared = SSE / df_resid
+    # Estimated error variance: sigmâ² = SSR / (n - p)
+    sigma_squared = SSR / df_resid
 
     # Standard errors of coefficients: sqrt(diag(σ² * (X'X)^(-1)))
     var_beta_hat = sigma_squared * np.linalg.inv(X.T @ X)  # (p x p)
@@ -77,8 +78,8 @@ def ols(y, X):
         'p_values': p_values,               # (p x 1)
         'conf_intervals': conf_intervals,   # (p x 2)
         'SST': SST,                         # scalar
-        'SSR': SSR,                         # scalar
         'SSE': SSE,                         # scalar
+        'SSR': SSR,                         # scalar
         'R_squared': R_squared,             # scalar
         'n': n, 'p': p,                     # observations and parameters
         'df_resid': df_resid,               # residual degrees of freedom
@@ -100,7 +101,7 @@ def output(results):
     print(f"Number of Observations: {results['n']}")
     print(f"Residual Degrees of Freedom: {results['df_resid']}")
     print(f"R-squared: {results['R_squared']:.4f}")
-    print(f"SST: {results['SST']:.4f}, SSR: {results['SSR']:.4f}, SSE: {results['SSE']:.4f}")
+    print(f"SST: {results['SST']:.4f}, SSE: {results['SSE']:.4f}, SSR: {results['SSR']:.4f}")
     print("="*98)
     print(f"{'Variable':<20}{'Coefficient':>15}{'Std. Error':>15}{'t':>12}{'P>|t|':>12}{'95% Conf. Interval':>22}")
     print("-"*98)
@@ -126,7 +127,7 @@ def summary(models, options=None):
                               Example: ['beta_hat', 'se', 'R_squared']
     """
     # Default fields to include if options is None
-    default_fields = ['beta_hat', 'se', 'R_squared', 'SST', 'SSR', 'SSE', 'n']
+    default_fields = ['beta_hat', 'se', 'R_squared', 'SST', 'SSE', 'SSR', 'n']
     fields = options if options else default_fields
 
     # Collect all unique regressors across models and count their occurrences
@@ -166,7 +167,7 @@ def summary(models, options=None):
         table.append(row_se)
 
     # Rows for scalar metrics like R_squared, SST, etc.
-    scalar_metrics = ['R_squared', 'SST', 'SSR', 'SSE', 'n']
+    scalar_metrics = ['R_squared', 'SST', 'SSE', 'SSR', 'n']
     for metric in scalar_metrics:
         if metric in fields:
             row_metric = [metric]
@@ -184,18 +185,127 @@ def summary(models, options=None):
     with pd.option_context('display.colheader_justify', 'center'):
         print(df.to_string(index=False, header=False))
 
-def Ftest(m_ur, m_r, quiet=True, title="F-test for Joint Significance"):
-    """Classical F-test based on unrestricted and restricted SSE."""
-    SSE_ur = m_ur['SSE']
-    SSE_r = m_r['SSE']
+def Ftest(m_ur, m_r, alpha=0.05):
+    """F-test based on unrestricted and restricted OLS results."""
+    SSR_ur = m_ur['SSR']
+    SSR_r = m_r['SSR']
     q = m_ur['p'] - m_r['p']
     df_resid = m_ur['df_resid']
 
-    F_stat = ((SSE_r - SSE_ur) / q) / (SSE_ur / df_resid)
-    p_value = 1 - stats.f.cdf(F_stat, q, df_resid)
+    F_stat = ((SSR_r - SSR_ur) / q) / (SSR_ur / df_resid)
+    p_value = stats.f.sf(F_stat, q, df_resid)
+    critical_value = stats.f.ppf(1 - alpha, q, df_resid)
 
-    if not quiet:
-        print(title)
-        print(f"  F-statistic: {F_stat:.4f} ~ F({q:d}, {df_resid:d})")
-        print(f"  P-value: {p_value:.4f}")
+    print(f"F-test: F({q:d}, {df_resid:d}) = {F_stat:.4f}")
+    print(f"{100 * alpha:g}% critical value = {critical_value:.4f}, p-value = {p_value:.4f}")
     return F_stat, p_value
+
+
+def Waldtest(m_ur, R, r, alpha=0.05):
+    """Wald test of the linear hypothesis H0: R beta = r."""
+    q = R.shape[0]
+
+    d = R @ m_ur['beta_hat'] - r
+    V_d = R @ m_ur['var_beta_hat'] @ R.T
+    Wald = np.squeeze(d.T @ np.linalg.solve(V_d, d))
+    p_value = stats.chi2.sf(Wald, q)
+    critical_value = stats.chi2.ppf(1 - alpha, q)
+
+    print(f"Wald test: chi2({q:d}) = {Wald:.4f}")
+    print(f"{100 * alpha:g}% critical value = {critical_value:.4f}, p-value = {p_value:.4f}")
+    return Wald, p_value
+
+
+def bin_means(x, y, bins=20):
+    """Group means using quantile bins, or each x value when bins=None."""
+    data = pd.DataFrame({
+        'x': np.asarray(x).reshape(-1),
+        'y': np.asarray(y).reshape(-1)
+    }).dropna()
+    if bins is None:
+        return data.groupby('x', as_index=False)['y'].mean()
+    data['bin'] = pd.qcut(data['x'], bins, duplicates='drop')
+    return data.groupby('bin', observed=True)[['x', 'y']].mean()
+
+
+def binscatter(x, y, bins=20, ax=None, xlabel=None, ylabel=None,
+               title=None, raw=True, regression=True):
+    """Plot binned means, raw observations, and a simple OLS regression line."""
+    x_name = getattr(x, 'name', None) or 'x'
+    y_name = getattr(y, 'name', None) or 'y'
+    data = pd.DataFrame({
+        'x': np.asarray(x).reshape(-1),
+        'y': np.asarray(y).reshape(-1)
+    }).dropna()
+
+    own_figure = ax is None
+    if own_figure:
+        _, ax = plt.subplots(figsize=(5, 4))
+
+    means = bin_means(data['x'], data['y'], bins)
+    if raw:
+        ax.scatter(data['x'], data['y'], s=5, alpha=0.08, color='grey')
+    mean_label = 'Means by x value' if bins is None else 'Binned means'
+    ax.scatter(means['x'], means['y'], color='tab:blue', label=mean_label)
+
+    if regression:
+        X = pd.DataFrame({'const': 1.0, x_name: data['x']})
+        y_series = pd.Series(data['y'].to_numpy(), name=y_name)
+        model = ols(y_series, X)
+        b0, b1 = model['beta_hat'].ravel()
+        line = np.linspace(data['x'].min(), data['x'].max(), 100)
+        label = rf'OLS: slope = {b1:.3f}, $R^2$ = {model["R_squared"]:.3f}'
+        ax.plot(line, b0 + b1 * line, color='tab:red', label=label)
+
+    x_label = xlabel or x_name
+    y_label = ylabel or y_name
+    ax.set(xlabel=x_label, ylabel=y_label,
+           title=title or f'{y_label} vs. {x_label}')
+    ax.legend()
+
+    if own_figure:
+        plt.tight_layout()
+        plt.show()
+
+
+def residual_variance_plot(m, z, bins=10, axes=None, xlabel=None,
+                           title=None, titles=None):
+    """Plot OLS residuals and binned mean squared residuals against z."""
+    u_hat = m['u_hat'].ravel()
+    z_name = getattr(z, 'name', None) or 'z'
+    residual_means = bin_means(z, u_hat, bins)
+    means = bin_means(z, u_hat ** 2, bins)
+
+    own_figure = axes is None
+    if own_figure:
+        fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    else:
+        fig = axes[0].figure
+
+    default_title = ('Mean squared residuals by x value' if bins is None
+                     else 'Mean squared residuals by bins')
+    titles = titles or ('Residuals', default_title)
+
+    axes[0].scatter(z, u_hat, s=5, alpha=0.08)
+    axes[0].scatter(residual_means['x'], residual_means['y'],
+                    color='tab:red', label=('Means by x value' if bins is None
+                                            else 'Binned means'))
+    axes[0].axhline(0, color='black', linewidth=1)
+    axes[0].set(xlabel=xlabel or z_name, ylabel='Residual', title=titles[0])
+    axes[0].legend()
+
+    axes[1].scatter(means['x'], means['y'], color='tab:blue')
+    axes[1].plot(means['x'], means['y'], color='tab:blue')
+    axes[1].set(xlabel=xlabel or z_name,
+                ylabel=r'Mean of $\hat u^2$',
+                title=titles[1])
+
+    if title:
+        fig.suptitle(title)
+    fig.tight_layout()
+    if own_figure:
+        plt.show()
+
+    variance_ratio = means['y'].max() / means['y'].min()
+    groups = 'x values' if bins is None else 'bins'
+    print(f'Max/min mean(u_hat^2) by {groups} = {variance_ratio:.2f}')
